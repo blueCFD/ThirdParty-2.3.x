@@ -120,16 +120,3 @@ definedBUILDmachine()
 
   BUILD=${machine}-${operatingsystem}-gnu
 }
-
-
-build_pexports()
-{
-  export PATH=$PATH:$WM_THIRD_PARTY_DIR/platforms/$WM_ARCH$WM_COMPILER/pexports-0.44-1/bin
-  if test "x`which pexports`" = "x" ; then
-  (
-    cd $WM_THIRD_PARTY_DIR
-    ./build-pexports
-  )
-  fi
-}
-

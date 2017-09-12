@@ -139,7 +139,7 @@ metis_version=$(. $WM_PROJECT_DIR/etc/config/metis.sh; \
 boost_version=boost_1_54_0
 cgal_version=CGAL-4.3
 
-make_version=3.82
+make_version=4.0
 flex_version=2.5.35
 
 qt_version=4.8.4

@@ -53,8 +53,8 @@ create_gcccompatible_library()
 {
   echo -e "\033[1m creating libmpi.a \033[0m"
   cd $MPI_ARCH_PATH/lib
-  pexports -o mpich2mpi.dll > mpich2.def
-  ${WM_COMPILER_ARCH}-dlltool -d mpich2.def -l libmpi.a -D MPICH2MPI.DLL
+  gendef - mpich2mpi.dll > mpich2.def
+  dlltool -d mpich2.def -l libmpi.a -D MPICH2MPI.DLL
 }
 
 
@@ -95,11 +95,6 @@ if [ ! -e "$MPI_ARCH_PATH/lib/mpich2mpi.dll" ]; then
 fi
 
 if [ ! -e "$MPI_ARCH_PATH/lib/libmpi.a" ]; then
-
-  if ! onWin; then
-    #this function will take care of the logistics associated with using pexports.
-    build_pexports
-  fi
 
   echo -e "\033[1m Generating MPICH2 library interfaces for MinGW... \033[0m"
 

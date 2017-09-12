@@ -1,7 +1,7 @@
-#! /bin/bash
+#!/bin/bash
 #------------------------------------------------------------------------------
 # License
-#     Copyright (C) 2011-2014 blueCAPE Lda
+#     Copyright (C) 2011-2016 blueCAPE Lda
 #
 #     This file is part of blueCAPE's unofficial mingw patches for OpenFOAM.
 #     For more information about these patches, visit:
@@ -32,8 +32,9 @@
 #        http://www.microsoft.com/download/en/details.aspx?id=14737
 #      * HPC Pack 2012 MS-MPI Redistributable Package:
 #        http://www.microsoft.com/en-us/download/details.aspx?id=36045
-#   It will need 7zip and wget installed and visible from the shell, since it
-#   will download the installation packages that have the necessary files.
+#
+#   This is designed to be installed directly on Windows, so that it's ready
+#   to be used after this script is finished.
 #
 #------------------------------------------------------------------------------
 
@@ -107,40 +108,76 @@ download_files()
 unpack_files()
 {
   echo "Unpacking files..."
+  
+  #Just in case, purge the previous installation
+  cleanup
 
-  rm $SRCDIR/*
+  createBinIncludeLib $MPI_ARCH_PATH
 
   #depends on the MPI version
   case $WM_MPLIB in
     MSMPI2008)
 
-      {
-        7z x $DownloadRepository/$FINAL_INSTPACK_FILE -o$SRCDIR/ product.cab > /dev/null && \
-        cd $SRCDIR && \
-        7z x product.cab mpi*.h msmpi${DLLVERNUM}.dll > /dev/null
-        [ -z "${DLLVERNUM}" ] && 7z x product.cab MSMPI_32 > /dev/null
-      } || {
-        7z x $DownloadRepository/$FINAL_INSTPACK_FILE -o$SRCDIR/ mpi*.h msmpi${DLLVERNUM}.dll > /dev/null
-        [ -z "${DLLVERNUM}" ] && 7z x $DownloadRepository/$FINAL_INSTPACK_FILE -o$SRCDIR/ MSMPI_32 > /dev/null
-      }
+      relativePath=${MPI_ARCH_PATH#$WM_THIRD_PARTY_DIR/}
 
-      [ -n "${DLLVERNUM}" ] && mv msmpi${DLLVERNUM}.dll msmpi.dll
-      [ -z "${DLLVERNUM}" ] && mv MSMPI_32 libmpi.a
+      if [ $WM_ARCH_OPTION = 32 ]; then
+
+        cmd /c "$(echo "msiexec /a download\\${WM_MPLIB}_mpi_x86.msi /qb TARGETDIR=\"%CD%\\${relativePath//\//\\}\"")"
+
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/Bin"/*.* "${MPI_ARCH_PATH}/bin/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/Inc"/*.* "${MPI_ARCH_PATH}/include/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/Lib/i386"/*.* "${MPI_ARCH_PATH}/lib/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/License"/* "${MPI_ARCH_PATH}/"
+        cp "${MPI_ARCH_PATH}/PFiles/System"/*.* "${MPI_ARCH_PATH}/bin/"
+
+        # The 32-bit version library interface is already compatible with GCC+MinGW
+        cp "${MPI_ARCH_PATH}/lib/msmpi.lib" "${MPI_ARCH_PATH}/lib/libmpi.a"
+
+      else
+
+        cmd /c "$(echo "msiexec /a download\\${WM_MPLIB}_mpi_x64.msi /qb TARGETDIR=\"%CD%\\${relativePath//\//\\}\"")"
+        
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/Bin"/*.* "${MPI_ARCH_PATH}/bin/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/Inc"/*.* "${MPI_ARCH_PATH}/include/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/Lib/amd64"/*.* "${MPI_ARCH_PATH}/lib/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2008 R2/License"/* "${MPI_ARCH_PATH}/"
+        cp "${MPI_ARCH_PATH}/PFiles/System64"/*.* "${MPI_ARCH_PATH}/bin/"
+
+      fi
+
+      cp "${MPI_ARCH_PATH}/bin/mpiexec.exe" "${MPI_ARCH_PATH}/bin/mpirun.exe"
     ;;
 
     MSMPI2012)
 
-      {
-        7z x $DownloadRepository/$FINAL_INSTPACK_FILE -o$SRCDIR/ product.cab > /dev/null && \
-        cd $SRCDIR && \
-        7z x product.cab mpi*.h msmpi${DLLVERNUM}.dll msmpi.lib > /dev/null
-      } || {
-        7z x $DownloadRepository/$FINAL_INSTPACK_FILE -o$SRCDIR/ mpi*.h  msmpi.lib \
-           msmpi${DLLVERNUM}.dll > /dev/null
-      }
+      relativePath=${MPI_ARCH_PATH#$WM_THIRD_PARTY_DIR/}
 
-      [ -n "${DLLVERNUM}" ] && mv msmpi${DLLVERNUM}.dll msmpi.dll
-      [ -z "${DLLVERNUM}" ] && mv msmpi.lib libmpi.a
+      if [ $WM_ARCH_OPTION = 32 ]; then
+
+        cmd /c "$(echo "msiexec /a download\\${WM_MPLIB}_mpi_x86.msi /qb TARGETDIR=\"%CD%\\${relativePath//\//\\}\"")"
+
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/Bin"/*.* "${MPI_ARCH_PATH}/bin/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/Inc"/*.* "${MPI_ARCH_PATH}/include/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/Lib/i386"/*.* "${MPI_ARCH_PATH}/lib/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/License"/* "${MPI_ARCH_PATH}/"
+        cp "${MPI_ARCH_PATH}/PFiles/System"/*.* "${MPI_ARCH_PATH}/bin/"
+        
+        # The 32-bit version library interface is already compatible with GCC+MinGW
+        cp "${MPI_ARCH_PATH}/lib/msmpi.lib" "${MPI_ARCH_PATH}/lib/libmpi.a"
+
+      else
+
+        cmd /c "$(echo "msiexec /a download\\${WM_MPLIB}_mpi_x64.msi /qb TARGETDIR=\"%CD%\\${relativePath//\//\\}\"")"
+        
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/Bin"/*.* "${MPI_ARCH_PATH}/bin/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/Inc"/*.* "${MPI_ARCH_PATH}/include/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/Lib/amd64"/*.* "${MPI_ARCH_PATH}/lib/"
+        cp "${MPI_ARCH_PATH}/PFiles/Microsoft HPC Pack 2012/License"/* "${MPI_ARCH_PATH}/"
+        cp "${MPI_ARCH_PATH}/PFiles/System64"/*.* "${MPI_ARCH_PATH}/bin/"
+
+      fi
+      
+      cp "${MPI_ARCH_PATH}/bin/mpiexec.exe" "${MPI_ARCH_PATH}/bin/mpirun.exe"
     ;;
 
   esac
@@ -148,28 +185,13 @@ unpack_files()
 }
 
 
-function copy_and_link_msmpi
-{
-  cd "$BUILDDIR"
-
-  echo -e "\033[1m Purging installed msmpi \033[0m"
-  rm -rf *
-
-  echo -e "\033[1m copying necessary files \033[0m"
-  createBinIncludeLib .
-  cp $SRCDIR/*.dll lib/
-  cp $SRCDIR/*.h include/
-}
-
 function create_gcccompatible_library
 {
   echo -e "\033[1m creating libmpi.a \033[0m"
   if [ -n "${DLLVERNUM}" ]; then
-    cd lib
-    pexports -o msmpi.dll > libmpi.def
-    ${WM_COMPILER_ARCH}-dlltool -d libmpi.def -l libmpi.a -D msmpi.dll
-  else
-    cp $SRCDIR/*.a lib/
+    cd $BUILDDIR/lib
+    gendef - ../bin/msmpi.dll > libmpi.def
+    dlltool -d libmpi.def -l libmpi.a -D msmpi.dll
   fi
 }
 
@@ -215,6 +237,10 @@ echo '--- mpi.h_orig  2011-01-18 15:11:38.284485101 +0000
  #else
 ' | patch -p0
 
+  if [ "$WM_MPLIB" = "MSMPI2012" ]; then
+    patch -p0 --binary < $WM_THIRD_PARTY_DIR/etc/patches/patch_msmpi2012_mpi_h
+  fi
+
   if [ -n "${DLLVERNUM}" ]; then
     cat mpi.h | sed -e 's=\#define MPIAPI __stdcall=\#define MPIAPI=' > mpi.h_tmp
     mv -f mpi.h_tmp mpi.h
@@ -241,42 +267,29 @@ if [ $# -eq 1 -a "$1" = "clean" ]; then
 
 else
 
-  if test -z "x`which 7z`" ; then
-    echo "Please install 7zip. In Ubuntu, the package name is p7zip-full."
-    echo "If 7zip isn't available for your Linux distribution, please go to www.7zip.org to download the generic version."
+  if test -z "x`which msiexec`" ; then
+    echo "The installation application msiexec was not found. Cannot proceed."
+    exit 1
+  elif ! onWin; then
+    echo "This script was designed to be used on Windows (using MSYS/MinGW). Cannot proceed."
     exit 1
   fi
 
-  mkdir -p "$BUILDDIR"
-  if [ ! -d "$SRCDIR" ]; then mkdir -p "$SRCDIR"; fi
+  if [ ! -e "$BUILDDIR/lib/libmpi.a" ]; then
 
-  if [ -d "$SRCDIR" ]; then
+    echo -e "\033[1m Downloading necessary MSMPI installation files...\033[0m"
+    download_files
 
-    if [ ! -e "$BUILDDIR/lib/libmpi.a" ]; then
+    echo -e "\033[1m Unpacking necessary MSMPI installation files...\033[0m"
+    unpack_files
 
-      echo -e "\033[1m Downloading necessary MSMPI installation files...\033[0m"
-      download_files
+    echo -e "\033[1m Generating MSMPI stub... \033[0m"
 
-      echo -e "\033[1m Unpacking necessary MSMPI installation files...\033[0m"
-      unpack_files
-
-      if ! onWin; then
-        #this function will take care of the logistics associated with using pexports.
-        build_pexports
-      fi
-
-      echo -e "\033[1m Generating MSMPI stub... \033[0m"
-
-      copy_and_link_msmpi
-      create_gcccompatible_library
-      patch_mpi_includes
-      echo -e "\033[1m All done. \033[0m"
-    else
-      echo -e "\033[1m MSMPI stub is already built and ready to use. \033[0m"
-    fi
-
+    create_gcccompatible_library
+    patch_mpi_includes
+    echo -e "\033[1m All done. \033[0m"
   else
-    echo -e "\033[1m Failed to complete, due to lack of folder $SRCDIR \033[0m"
+    echo -e "\033[1m MSMPI stub is already built and ready to use. \033[0m"
   fi
 
   cd $WM_THIRD_PARTY_DIR

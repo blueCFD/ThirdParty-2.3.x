@@ -53,11 +53,6 @@ wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
 #------------------------------------------------------------------------------
 
 #
-if isMinGW; then
-  ./AllwcleanZLib
-  ./AllwcleanRegEx
-fi
-
 if [ -d "libccmio-2.6.1" ]
 then
   wclean libso libccmio-2.6.1

@@ -53,8 +53,8 @@ create_gcccompatible_library()
 {
   echo -e "\033[1m creating libmpi.a \033[0m"
   cd $MPI_ARCH_PATH/lib
-  pexports -o $MPI_ARCH_PATH/bin/libmpi.dll > openmpi.def
-  ${WM_COMPILER_ARCH}-dlltool -d openmpi.def -l libmpi.a -D libmpi.dll
+  gendef - $MPI_ARCH_PATH/bin/libmpi.dll > openmpi.def
+  dlltool -d openmpi.def -l libmpi.a -D libmpi.dll
 }
 
 patch_mpi_includes()
@@ -77,11 +77,6 @@ if [ ! -e "$MPI_ARCH_PATH/bin/libmpi.dll" ]; then
 fi
 
 if [ ! -e "$MPI_ARCH_PATH/lib/libmpi.a" ]; then
-
-  if ! onWin; then
-    #this function will take care of the logistics associated with using pexports.
-    build_pexports
-  fi
 
   echo -e "\033[1m Generating Open-MPI library interfaces for MinGW... \033[0m"
 

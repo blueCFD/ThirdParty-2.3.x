@@ -1,38 +1,35 @@
 #!/bin/sh
 #------------------------------------------------------------------------------
 # License
-#     Copyright (C) 2011-2014 blueCAPE Lda
+#     Copyright (C) 2011-2013 blueCAPE Lda
 #
 #     This file is derived from the branch "get-em" available here:
 #         https://github.com/wyldckat/ThirdParty-2.0.x/commits/get-em
 #
 #     This file is part of blueCAPE's unofficial mingw patches for OpenFOAM.
 #     For more information about these patches, visit:
-#         http://bluecfd.com/Core
+#         http://www.bluecape.com.pt/blueCFD
 #
 #     It's licensed under the same license of the target software, namely GPL
 #     v3 or above (see <http://www.gnu.org/licenses/>).
 #
 #     The target software is OpenFOAM(R) <http://www.openfoam.org>. It's
-#     trademarked by and Copyright (C) 2011-2014 OpenFOAM Foundation
+#     trademarked by and Copyright (C) 2011-2013 OpenFOAM Foundation
 #
 #     You should have received a copy of the GNU General Public License
 #     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 #
 # File
-#     etc/tools/get-em/make
+#     etc/tools/get-em/libccmio
 #
 # Description
 #     This script will gather the necessary information about the application.
 #     This script expects to be executed in the base folder where the get-em script is.
 #
-# FIXME
-#   * Currently it is hard-coded to use tar.gz.
-#
 #------------------------------------------------------------------------------
 
-versionVar="make_version"
-appName="make"
+versionVar="libccmio_version"
+appName="libccmio"
 appDefaultSep="-"
 appFileExt="tar.gz"
 
@@ -42,21 +39,18 @@ appFileExt="tar.gz"
 #
 GE_showDesc()
 {
-  echo "make - Retrieve GNU make. Size: 250kB to 1.7MB"
+  echo "libccmio - Retrieve the libccmio package. Run './AllwmakeLibccmio' first for more information. Size: 30MB"
 }
 
 
 #
-# Updates the file defined in $versionCacheFile, using the mirror url $1 and
-# uses the $testFile as a sandbox.
+# Updates the files defined in $versionCacheFile and ${versionCacheFile}_urls,
+# using the mirror url $1 and uses the $testFile as a sandbox.
 #
 GE_update()
 {
-  wget "$1" -O $testFile > /dev/null 2>&1
-  grep -e "make-[34]\.[0-9]*[\.0-9]*.$appFileExt<" $testFile | \
-    sed -e 's=.*>\(make-.*\)\.'$appFileExt'<.*=\1=' -e 's_-_=_' | \
-    sort -u > $versionCacheFile
-  rm $testFile
+  #do nothing...
+  :
 }
 
 
@@ -66,7 +60,7 @@ GE_update()
 #
 GE_geturl()
 {
-  echo ${1}make-$2.$appFileExt
+  grep -e "-${2}\." ${versionCacheFile}_urls
 }
 
 
@@ -75,7 +69,7 @@ GE_geturl()
 #
 GE_getfolder()
 {
-  echo make-$1
+  echo ${appName}-$1
 }
 
 

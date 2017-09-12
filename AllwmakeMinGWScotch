@@ -26,7 +26,7 @@
 #     AllwmakeMinGWScotch
 #
 # Description
-#     Build script for libScotch for MinGW only!
+#     Build script for libScotch for MinGW on Windows! Preferably using MSYS2.
 #
 #------------------------------------------------------------------------------
 # run from third-party directory only
@@ -38,30 +38,14 @@ wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
     exit 1
 }
 
-if ! isMinGW; then
-  echo "Error: this script is meant to be used for MinGW compilers only!"
+if ! onWin && ! isMinGW; then
+  echo "Error: this script is meant to be used for MinGW compilers on Windows!"
   exit 1
 fi
 
 . etc/tools/ThirdPartyFunctions
-. etc/tools/makeExtraThirdPartyFunctions
 
-usage() {
-    exec 1>&2
-    while [ "$#" -ge 1 ]; do echo "$1"; shift; done
-    cat<<USAGE
-
-usage: ${0##*/} [cross4win]
-
-* Cross-compiles Scotch and PTScotch to run in Windows.
-* Option "cross4win" will compile the "dummysizes.exe" binary for running on
-  Windows. The binaries will be placed in the following folders:
-    * For Scotch - $SCOTCH_ARCH_PATH/include
-    * For PTScotch - $SCOTCH_ARCH_PATH/include/$FOAM_MPI
-
-USAGE
-    exit 1
-}
+#------------------------------------------------------------------------------
 
 if [ -z "$SCOTCH_VERSION" ]; then
     # get SCOTCH_VERSION, SCOTCH_ARCH_PATH
@@ -75,39 +59,13 @@ if [ -z "$SCOTCH_VERSION" ]; then
     fi
 fi
 
-CROSS4WIN=0
-# parse options
-while [ "$#" -gt 0 ]
-do
-    case "$1" in
-    -h | -help)
-        usage
-        ;;
-    cross4win)
-        CROSS4WIN=1
-        shift
-        ;;
-    *)
-        usage "unknown option/argument: '$*'"
-        ;;
-    esac
-done
-
-
-#Detect if running directly on Windows
-SCOTCH_ON_WINDOWS=""
-if onWin; then
-  SCOTCH_ON_WINDOWS=".win"
-fi
-
 echo ========================================
 echo "Build Scotch decomposition library $SCOTCH_VERSION"
 echo "    $SCOTCH_ARCH_PATH"
 
-scotchMakefile=../../etc/wmakeFiles/scotch/Makefile.inc.${WM_COMPILER}${SCOTCH_ON_WINDOWS}
-toolkitPath=$WM_THIRD_PARTY_DIR/etc/wmakeFiles/scotch/mingw
+scotchMakefile=../../etc/wmakeFiles/scotch/Makefile.inc.${WM_COMPILER}.win
 
-if isMinGW && [ ! -e "$SCOTCH_VERSION/mingw.patch.complete" ]; then
+if [ ! -e "$SCOTCH_VERSION/mingw.patch.complete" ]; then
 (
     cd $SCOTCH_VERSION
     patch -p1 < $WM_THIRD_PARTY_DIR/etc/patches/patch_scotch && \
@@ -118,8 +76,7 @@ fi
 if [ -f $SCOTCH_ARCH_PATH/include/scotch.h \
   -a -r $FOAM_EXT_LIBBIN/libscotch.dll \
   -a -r $FOAM_EXT_LIBBIN/libscotcherr.dll \
-  -a -r $FOAM_EXT_LIBBIN/libscotcherrexit.dll \
-  -a $CROSS4WIN -eq 0 ]
+  -a -r $FOAM_EXT_LIBBIN/libscotcherrexit.dll ]
 then
     echo "    scotch header in $SCOTCH_ARCH_PATH/include"
     echo "    scotch libs   in $FOAM_EXT_LIBBIN"
@@ -151,35 +108,8 @@ else
 
     make realclean 2>/dev/null  # for safety
 
-    if [ $CROSS4WIN -eq 0 ]; then
-
-        #if not on Windows, prepare the necessary files
-        if ! onWin; then
-
-          #create a dummy 'dummysizes.exe' file, because it will be
-          #considered as already generated
-
-          echo "#!bin/sh" > libscotch/dummysizes.exe
-          chmod +x libscotch/dummysizes.exe
-
-          #copy the pre-prepared header files
-          cp "$toolkitPath/scotch.h_$WM_COMPILER" libscotch/scotch.h
-          cp "$toolkitPath/scotchf.h_$WM_COMPILER" libscotch/scotchf.h
-
-        fi
-
-        make -j $WM_NCOMPPROCS scotch \
-        && make $configOpt install
-
-    else
-
-        dummysizesMakeFile=$toolkitPath/Makefile.dummysizes
-        cd libscotch
-        make -f $dummysizesMakeFile scotch \
-        && cp dummysizes.exe $prefixDIR/include
-        cd ..
-
-    fi
+    make -j $WM_NCOMPPROCS scotch \
+    && make $configOpt install
 
     # cleanup, could also remove Makefile.inc
     make realclean 2>/dev/null
@@ -204,8 +134,7 @@ then
     if [ -f $SCOTCH_ARCH_PATH/include/$FOAM_MPI/ptscotch.h \
       -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotch.dll \
       -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotcherr.dll \
-      -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotcherrexit.dll \
-      -a $CROSS4WIN -eq 0 ]
+      -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotcherrexit.dll ]
     then
         echo "    ptscotch header in $SCOTCH_ARCH_PATH/include/$FOAM_MPI"
         echo "    ptscotch libs   in $FOAM_EXT_LIBBIN/$FOAM_MPI"
@@ -238,38 +167,8 @@ then
 
         make realclean 2>/dev/null  # for safety
 
-        if [ $CROSS4WIN -eq 0 ]; then
-
-            #if not on Windows, prepare the necessary files
-            if ! onWin; then
-
-              #create a dummy 'dummysizes.exe' file, because it will be
-              #considered as already generated
-
-              echo "#!bin/sh" > libscotch/dummysizes.exe
-              echo "#!bin/sh" > libscotch/ptdummysizes.exe
-              chmod +x libscotch/*dummysizes.exe
-
-              #copy the pre-prepared header files
-              cp "$toolkitPath/scotch.h_$WM_COMPILER" libscotch/scotch.h
-              cp "$toolkitPath/scotchf.h_$WM_COMPILER" libscotch/scotchf.h
-              cp "$toolkitPath/ptscotch.h_${WM_COMPILER}_$FOAM_MPI" libscotch/ptscotch.h
-              cp "$toolkitPath/ptscotchf.h_${WM_COMPILER}_$FOAM_MPI" libscotch/ptscotchf.h
-
-            fi
-
-            make -j $WM_NCOMPPROCS ptscotch \
-            && make $configOpt install
-
-        else
-
-            dummysizesMakeFile="$toolkitPath/Makefile.dummysizes"
-            cd libscotch
-            make -f $dummysizesMakeFile ptscotch \
-            && cp ptdummysizes.exe $incDIR/
-            cd ..
-
-        fi
+        make -j $WM_NCOMPPROCS ptscotch \
+        && make $configOpt install
 
         # cleanup, could also remove Makefile.inc
         make realclean 2>/dev/null
@@ -282,4 +181,5 @@ then
         echo "    WARNING: required include file 'ptscotch.h' not found!"
         echo
     }
+
 fi
