@@ -1,0 +1,113 @@
+#!/bin/sh
+#------------------------------------------------------------------------------
+# License
+#     This file is part of blueCAPE's unofficial mingw patches for OpenFOAM.
+#     For more information about these patches, visit:
+#         http://bluecfd.com/Core
+#
+#     OpenFOAM's official site: http://www.openfoam.com
+#
+#     OpenFOAM is free software: you can redistribute it and/or modify it
+#     under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+#     ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#     FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+#     for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Script
+#     AllwmakeMinGWScotch
+#
+# Description
+#     Build script for libScotch for MinGW only!
+#
+#------------------------------------------------------------------------------
+# run from third-party directory only
+cd ${0%/*} || exit 1
+wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
+    echo "Error: Current directory is not \$WM_THIRD_PARTY_DIR"
+    echo "    The environment variables are inconsistent with the installation."
+    echo "    Check the OpenFOAM entries in your dot-files and source them."
+    exit 1
+}
+
+if ! isMinGW; then
+  echo "Error: this script is meant to be used for MinGW compilers only!"
+  exit 1
+fi
+
+if onWin; then
+  echo "Error: ignoring request, since on Windows it's now needed."
+  exit 1
+fi
+
+. etc/tools/ThirdPartyFunctions
+. etc/tools/makeExtraThirdPartyFunctions
+
+if [ -z "$SCOTCH_VERSION" ]; then
+    # get SCOTCH_VERSION, SCOTCH_ARCH_PATH
+    if settings=`$WM_PROJECT_DIR/bin/foamEtcFile config/scotch.sh`
+    then
+        . $settings
+    else
+        echo
+        echo "Error: no config/scotch.sh settings"
+        echo
+    fi
+fi
+
+
+if [ ! -d $SCOTCH_ARCH_PATH ]
+then
+    echo
+    echo "    folder not found: $SCOTCH_ARCH_PATH"
+    echo
+elif [ ! -e "$SCOTCH_VERSION/src/libscotch/library.h" \
+    -o ! -e "$SCOTCH_VERSION/src/libscotch/library_f.h" \
+    -o ! -e "$SCOTCH_VERSION/src/libscotch/library_pt.h" \
+    -o ! -e "$SCOTCH_VERSION/src/libscotch/library_pt_f.h" \
+     ]
+then
+    echo
+    echo "    needed files not found: "
+    echo "      $SCOTCH_VERSION/src/libscotch/library.h"
+    echo "      $SCOTCH_VERSION/src/libscotch/library_f.h"
+    echo "      $SCOTCH_VERSION/src/libscotch/library_pt.h"
+    echo "      $SCOTCH_VERSION/src/libscotch/library_pt_f.h"
+    echo
+else
+(
+    #set -x
+
+    platformpath=${SCOTCH_ARCH_PATH#$PWD/*}
+    libscotchpath=$SCOTCH_VERSION/src/libscotch
+
+    echo "set WM_COMPILER=$WM_COMPILER" > getCompiler.bat
+
+    [ -e all_dummysizes.exe.$WM_COMPILER.tar.gz ] && rm all_dummysizes.exe.$WM_COMPILER.tar.gz
+
+    tar -czf all_dummysizes.exe.$WM_COMPILER.tar.gz \
+      $(find $platformpath -name "*dummysizes.exe") \
+      "$libscotchpath/library.h" \
+      "$libscotchpath/library_f.h" \
+      "$libscotchpath/library_pt.h" \
+      "$libscotchpath/library_pt_f.h" \
+      etc/tools/generateScotchHeaders.bat \
+      getCompiler.bat \
+      --transform='s='$platformpath'/include/==' \
+      --transform='s='$libscotchpath'/==' \
+      --transform='s=etc/tools/=='
+
+    rm getCompiler.bat
+
+    echo "Relevant files are packaged inside this file:"
+    echo "   $PWD all_dummysizes.exe.$WM_COMPILER.tar.gz"
+    echo ""
+    echo "Once unpacked on Windows, run the batch file 'generateScotchHeaders.bat'."
+)
+fi

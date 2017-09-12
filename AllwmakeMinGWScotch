@@ -1,0 +1,285 @@
+#!/bin/sh
+#------------------------------------------------------------------------------
+# License
+#     Copyright (C) 2011-2014 blueCAPE Lda
+#
+#     This file is part of blueCAPE's unofficial mingw patches for OpenFOAM.
+#     For more information about these patches, visit:
+#         http://bluecfd.com/Core
+#
+#     This file is a derivative work of OpenFOAM.
+#
+#     OpenFOAM is free software: you can redistribute it and/or modify it
+#     under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+#     ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#     FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+#     for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Script
+#     AllwmakeMinGWScotch
+#
+# Description
+#     Build script for libScotch for MinGW only!
+#
+#------------------------------------------------------------------------------
+# run from third-party directory only
+cd ${0%/*} || exit 1
+wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
+    echo "Error: Current directory is not \$WM_THIRD_PARTY_DIR"
+    echo "    The environment variables are inconsistent with the installation."
+    echo "    Check the OpenFOAM entries in your dot-files and source them."
+    exit 1
+}
+
+if ! isMinGW; then
+  echo "Error: this script is meant to be used for MinGW compilers only!"
+  exit 1
+fi
+
+. etc/tools/ThirdPartyFunctions
+. etc/tools/makeExtraThirdPartyFunctions
+
+usage() {
+    exec 1>&2
+    while [ "$#" -ge 1 ]; do echo "$1"; shift; done
+    cat<<USAGE
+
+usage: ${0##*/} [cross4win]
+
+* Cross-compiles Scotch and PTScotch to run in Windows.
+* Option "cross4win" will compile the "dummysizes.exe" binary for running on
+  Windows. The binaries will be placed in the following folders:
+    * For Scotch - $SCOTCH_ARCH_PATH/include
+    * For PTScotch - $SCOTCH_ARCH_PATH/include/$FOAM_MPI
+
+USAGE
+    exit 1
+}
+
+if [ -z "$SCOTCH_VERSION" ]; then
+    # get SCOTCH_VERSION, SCOTCH_ARCH_PATH
+    if settings=`$WM_PROJECT_DIR/bin/foamEtcFile config/scotch.sh`
+    then
+        . $settings
+    else
+        echo
+        echo "Error: no config/scotch.sh settings"
+        echo
+    fi
+fi
+
+CROSS4WIN=0
+# parse options
+while [ "$#" -gt 0 ]
+do
+    case "$1" in
+    -h | -help)
+        usage
+        ;;
+    cross4win)
+        CROSS4WIN=1
+        shift
+        ;;
+    *)
+        usage "unknown option/argument: '$*'"
+        ;;
+    esac
+done
+
+
+#Detect if running directly on Windows
+SCOTCH_ON_WINDOWS=""
+if onWin; then
+  SCOTCH_ON_WINDOWS=".win"
+fi
+
+echo ========================================
+echo "Build Scotch decomposition library $SCOTCH_VERSION"
+echo "    $SCOTCH_ARCH_PATH"
+
+scotchMakefile=../../etc/wmakeFiles/scotch/Makefile.inc.${WM_COMPILER}${SCOTCH_ON_WINDOWS}
+toolkitPath=$WM_THIRD_PARTY_DIR/etc/wmakeFiles/scotch/mingw
+
+if isMinGW && [ ! -e "$SCOTCH_VERSION/mingw.patch.complete" ]; then
+(
+    cd $SCOTCH_VERSION
+    patch -p1 < $WM_THIRD_PARTY_DIR/etc/patches/patch_scotch && \
+      touch mingw.patch.complete
+)
+fi
+
+if [ -f $SCOTCH_ARCH_PATH/include/scotch.h \
+  -a -r $FOAM_EXT_LIBBIN/libscotch.dll \
+  -a -r $FOAM_EXT_LIBBIN/libscotcherr.dll \
+  -a -r $FOAM_EXT_LIBBIN/libscotcherrexit.dll \
+  -a $CROSS4WIN -eq 0 ]
+then
+    echo "    scotch header in $SCOTCH_ARCH_PATH/include"
+    echo "    scotch libs   in $FOAM_EXT_LIBBIN"
+    echo
+else
+(
+    set -x
+    cd $SCOTCH_VERSION/src || exit 1
+
+    prefixDIR=$SCOTCH_ARCH_PATH
+    libDIR=$FOAM_EXT_LIBBIN
+
+    mkdir -p $prefixDIR 2>/dev/null
+    mkdir -p $libDIR 2>/dev/null
+    mkdir -p $prefixDIR/include 2>/dev/null
+
+    configOpt="prefix=$prefixDIR libdir=$libDIR"
+
+    if [ -f $scotchMakefile ]
+    then
+        rm -f Makefile.inc
+        ln -s $scotchMakefile Makefile.inc
+    fi
+
+    [ -f Makefile.inc ] || {
+        echo " Error: scotch needs an appropriate Makefile.inc"
+        exit 1
+    }
+
+    make realclean 2>/dev/null  # for safety
+
+    if [ $CROSS4WIN -eq 0 ]; then
+
+        #if not on Windows, prepare the necessary files
+        if ! onWin; then
+
+          #create a dummy 'dummysizes.exe' file, because it will be
+          #considered as already generated
+
+          echo "#!bin/sh" > libscotch/dummysizes.exe
+          chmod +x libscotch/dummysizes.exe
+
+          #copy the pre-prepared header files
+          cp "$toolkitPath/scotch.h_$WM_COMPILER" libscotch/scotch.h
+          cp "$toolkitPath/scotchf.h_$WM_COMPILER" libscotch/scotchf.h
+
+        fi
+
+        make -j $WM_NCOMPPROCS scotch \
+        && make $configOpt install
+
+    else
+
+        dummysizesMakeFile=$toolkitPath/Makefile.dummysizes
+        cd libscotch
+        make -f $dummysizesMakeFile scotch \
+        && cp dummysizes.exe $prefixDIR/include
+        cd ..
+
+    fi
+
+    # cleanup, could also remove Makefile.inc
+    make realclean 2>/dev/null
+)
+fi
+
+# verify existence of scotch include
+[ -f $SCOTCH_ARCH_PATH/include/scotch.h ] || {
+    echo
+    echo "    WARNING: required include file 'scotch.h' not found!"
+    echo
+}
+
+# build ptscotch if MPI (ThirdParty or system) is available
+if [ "${FOAM_MPI:-dummy}" != dummy ]
+then
+    echo ========================================
+    echo "Build PTScotch decomposition library $SCOTCH_VERSION (uses MPI)"
+    echo "    $SCOTCH_ARCH_PATH"
+    echo
+
+    if [ -f $SCOTCH_ARCH_PATH/include/$FOAM_MPI/ptscotch.h \
+      -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotch.dll \
+      -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotcherr.dll \
+      -a -r $FOAM_EXT_LIBBIN/$FOAM_MPI/libptscotcherrexit.dll \
+      -a $CROSS4WIN -eq 0 ]
+    then
+        echo "    ptscotch header in $SCOTCH_ARCH_PATH/include/$FOAM_MPI"
+        echo "    ptscotch libs   in $FOAM_EXT_LIBBIN/$FOAM_MPI"
+        echo
+    else
+    (
+        set -x
+        cd $SCOTCH_VERSION/src || exit 1
+
+        prefixDIR=$SCOTCH_ARCH_PATH
+        libDIR=$FOAM_EXT_LIBBIN/$FOAM_MPI
+        incDIR=$SCOTCH_ARCH_PATH/include/$FOAM_MPI
+
+        mkdir -p $prefixDIR 2>/dev/null
+        mkdir -p $libDIR 2>/dev/null
+        mkdir -p $incDIR 2>/dev/null
+
+        configOpt="prefix=$prefixDIR libdir=$libDIR includedir=$incDIR"
+
+        if [ -f $scotchMakefile ]
+        then
+            rm -f Makefile.inc
+            ln -s $scotchMakefile Makefile.inc
+        fi
+
+        [ -f Makefile.inc ] || {
+            echo " Error: scotch needs an appropriate Makefile.inc"
+            exit 1
+        }
+
+        make realclean 2>/dev/null  # for safety
+
+        if [ $CROSS4WIN -eq 0 ]; then
+
+            #if not on Windows, prepare the necessary files
+            if ! onWin; then
+
+              #create a dummy 'dummysizes.exe' file, because it will be
+              #considered as already generated
+
+              echo "#!bin/sh" > libscotch/dummysizes.exe
+              echo "#!bin/sh" > libscotch/ptdummysizes.exe
+              chmod +x libscotch/*dummysizes.exe
+
+              #copy the pre-prepared header files
+              cp "$toolkitPath/scotch.h_$WM_COMPILER" libscotch/scotch.h
+              cp "$toolkitPath/scotchf.h_$WM_COMPILER" libscotch/scotchf.h
+              cp "$toolkitPath/ptscotch.h_${WM_COMPILER}_$FOAM_MPI" libscotch/ptscotch.h
+              cp "$toolkitPath/ptscotchf.h_${WM_COMPILER}_$FOAM_MPI" libscotch/ptscotchf.h
+
+            fi
+
+            make -j $WM_NCOMPPROCS ptscotch \
+            && make $configOpt install
+
+        else
+
+            dummysizesMakeFile="$toolkitPath/Makefile.dummysizes"
+            cd libscotch
+            make -f $dummysizesMakeFile ptscotch \
+            && cp ptdummysizes.exe $incDIR/
+            cd ..
+
+        fi
+
+        # cleanup, could also remove Makefile.inc
+        make realclean 2>/dev/null
+    )
+    fi
+
+    # verify existence of scotch include
+    [ -f $SCOTCH_ARCH_PATH/include/$FOAM_MPI/ptscotch.h ] || {
+        echo
+        echo "    WARNING: required include file 'ptscotch.h' not found!"
+        echo
+    }
+fi

@@ -1,0 +1,383 @@
+#!/bin/sh
+#------------------------------------------------------------------------------
+# =========                 |
+# \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+#  \\    /   O peration     |
+#   \\  /    A nd           | Copyright (C) 2012 OpenFOAM Foundation
+#    \\/     M anipulation  |
+#------------------------------------------------------------------------------
+# 2014-02-20 blueCAPE Lda: Modifications for blueCFD-Core 2.3
+#------------------------------------------------------------------------------
+# License
+#     This file is a derivative work of OpenFOAM.
+#
+#     OpenFOAM is free software: you can redistribute it and/or modify it
+#     under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+#     ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#     FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+#     for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Modifications
+#     This file has been modified by blueCAPE's unofficial mingw patches for
+#     OpenFOAM.
+#     For more information about these patches, visit:
+#         http://bluecfd.com/Core
+#
+#     Modifications made:
+#        - Based on OpenFOAM's own makeCGAL script, but adapted for
+#        (cross-)compiling with mingw.
+#
+# Script
+#     makeCGALMinGW
+#
+# Description
+#     Build script for CGAL with MinGW.
+#
+#------------------------------------------------------------------------------
+
+if ! onWin; then
+  echo "This script can only be used on Windows, due to some cross-compilation limitations."
+  exit 1
+fi
+
+cgalPACKAGE=$(. etc/defaults.sh ; echo $cgal_version)
+boostPACKAGE=$(. etc/defaults.sh ; echo $boost_version)
+GCCVERSION=$(. etc/defaults.sh ; echo $gcc_version | sed -e 's=gcc\-==')
+GMPVERSION=$(. $WM_THIRD_PARTY_DIR/etc/defaults.sh ; echo $gmp_version | sed 's=gmp-==')
+MPFRVERSION=$(. $WM_THIRD_PARTY_DIR/etc/defaults.sh ; echo $mpfr_version | sed 's=mpfr-==')
+ZLIBVERSION=$(. $WM_THIRD_PARTY_DIR/etc/defaults.sh ; echo $zlib_version | sed 's=zlib-==')
+
+#------------------------------------------------------------------------------
+# run from third-party directory only
+wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
+    echo "Error: Current directory is not \$WM_THIRD_PARTY_DIR"
+    echo "    The environment variables are inconsistent with the installation."
+    echo "    Check the OpenFOAM entries in your dot-files and source them."
+    exit 1
+}
+. etc/tools/ThirdPartyFunctions
+#------------------------------------------------------------------------------
+
+usage() {
+    exec 1>&2
+    while [ "$#" -ge 1 ]; do echo "$1"; shift; done
+    cat<<USAGE
+
+usage: ${0##*/} [OPTION] [CGAL-VERSION] [boost-VERSION]
+options:
+  -help
+
+* build CGAL with
+      $cgalPACKAGE
+      $boostPACKAGE
+
+USAGE
+    exit 1
+}
+
+
+# export WM settings in a form that GNU configure recognizes
+[ -n "$WM_CC" ]         &&  export CC="$WM_CC"
+[ -n "$WM_CXX" ]        &&  export CXX="$WM_CXX"
+[ -n "$WM_CFLAGS" ]     &&  export CFLAGS="$WM_CFLAGS"
+[ -n "$WM_CXXFLAGS" ]   &&  export CXXFLAGS="$WM_CXXFLAGS"
+[ -n "$WM_LDFLAGS" ]    &&  export LDFLAGS="$WM_LDFLAGS"
+export RC=${WM_COMPILER_ARCH}-windres
+
+
+# parse options
+while [ "$#" -gt 0 ]
+do
+    case "$1" in
+    -h | -help)
+        usage
+        ;;
+    CGAL-[0-9]*)
+        cgalPACKAGE="${1%%/}"
+        shift
+        ;;
+    boost-[0-9]* | boost_[0-9]* )
+        boostPACKAGE="${1%%/}"
+        shift
+        ;;
+    *)
+        usage "unknown option/argument: '$*'"
+        ;;
+    esac
+done
+
+
+#------------------------------------------------------------------------------
+
+#
+# Build Boost
+#
+#   BOOST_SOURCE_DIR : location of the original sources
+
+BOOST_ARCH_PATH=$installBASE/$boostPACKAGE
+BOOST_SOURCE_DIR=$WM_THIRD_PARTY_DIR/$boostPACKAGE
+
+if [ -d "$BOOST_ARCH_PATH" ]
+then
+    boostInc="$BOOST_ARCH_PATH/include"
+    boostLib="$BOOST_ARCH_PATH/lib"
+elif [ -d "$BOOST_SOURCE_DIR" ]
+then
+    boostInc="$BOOST_ARCH_PATH/include"
+    boostLib="$BOOST_ARCH_PATH/lib"
+
+    echo "Starting build: boost"
+    (
+        cd $BOOST_SOURCE_DIR || exit 1
+        
+        if [ ! -e "boost.patched" ]; then
+
+            #change line breaks to LF
+            cat boost/detail/interlocked.hpp | \
+                sed -e ':a;N;$!ba;s/\r\n/\n/g' > boost/detail/interlocked.hpp_tmp
+            mv -f boost/detail/interlocked.hpp_tmp boost/detail/interlocked.hpp
+
+            patch -p1 < \
+                $WM_THIRD_PARTY_DIR/etc/patches/patch_boost_1_54_0_interlocked \
+            && touch boost.patched
+
+        fi
+
+        rm -rf $BOOST_ARCH_PATH
+
+        if ! onWin; then
+
+            echo "using gcc : $GCCVERSION : ${WM_COMPILER_ARCH}-g++
+                            :
+                        <rc>${WM_COMPILER_ARCH}-windres
+                        <archiver>${WM_COMPILER_ARCH}-ar ;" > \
+                tools/build/v2/user-config.jam
+
+            find . -name "*.sh" | xargs chmod +x
+            ./bootstrap.sh \
+                --prefix=$BOOST_ARCH_PATH \
+                --with-libraries=thread \
+            && ./bjam -j $WM_NCOMPPROCS --prefix=$BOOST_ARCH_PATH \
+                      --build-dir=$buildBASE/$boostPACKAGE \
+                      --layout=tagged threadapi=win32 \
+                      toolset=gcc target-os=windows \
+                      install \
+            && echo "Built: boost"
+
+            #should clean up, since we also need to be able to build the Linux
+            #version!
+            rm tools/build/v2/user-config.jam
+
+        else
+
+            cd tools/build/v2/engine
+            cmd //c "build.bat mingw"
+
+            if [ $WM_ARCH_OPTION = 32 ]; then
+                cp bin.ntx86/*.exe ../../../..
+            else
+                cp bin.ntx86_64/*.exe ../../../..
+            fi
+            
+            cd ../../../..
+
+            ./bootstrap.sh \
+                --prefix=$BOOST_ARCH_PATH \
+                --with-libraries=thread \
+                --with-toolset=mingw \
+                --with-bjam=$BOOST_SOURCE_DIR/b2.exe \
+            && sed -i -e 's=using mingw=using gcc=g' \
+                      -e 's=mingw in=gcc in=' \
+                      -e 's=<toolset>mingw=<toolset>gcc=' \
+                      project-config.jam \
+            && ./b2 -j $WM_NCOMPPROCS --prefix=$BOOST_ARCH_PATH \
+                      --build-dir=$buildBASE/$boostPACKAGE \
+                      --layout=tagged \
+                      toolset=gcc target-os=windows \
+                      install \
+            && echo "Built: boost"
+            
+            # Dev notes:
+            # - The "tagged" option had to be used, instead of "system", as indicated here: https://svn.boost.org/trac/boost/ticket/7482
+
+        fi
+
+        if [ -e "$boostLib/libboost_system-mt.a" ]; then
+
+            for files in $boostLib/*-mt.a; do
+
+                filesb=$(echo $files | sed -e 's=\-mt\.a$=.a=' -e 's=_win32==')
+                cp $files $filesb
+
+            done
+
+        fi
+
+    ) || {
+        echo "Error building: boost"
+        exit 1
+    }
+fi
+
+
+# retrieve boost version:
+if [ -f "$boostInc/boost/version.hpp" ]
+then
+    BOOST_VERSION_NO=`sed -ne 's/^#define *BOOST_VERSION *\([0-9][0-9]*\).*$/\1/p' $boostInc/boost/version.hpp`
+else
+    echo "Boost does not appear to be installed"
+    echo "stopping build"
+    exit 1
+fi
+
+
+#
+# Build CGAL
+#
+#   CGAL_SOURCE_DIR : location of the original sources
+#   CGAL_BINARY_DIR : location of the build
+#   CGAL_DIR        : location of the installed program
+
+CGAL_SOURCE_DIR=$WM_THIRD_PARTY_DIR/$cgalPACKAGE
+CGAL_BINARY_DIR=$buildBASE/$cgalPACKAGE
+CGAL_ARCH_PATH=$installBASE/$cgalPACKAGE
+CGAL_DIR=$CGAL_ARCH_PATH
+
+(
+    # remove any existing build folder and recreate
+    if [ -d $CGAL_BINARY_DIR ]
+    then
+        echo "removing old build directory"
+        echo "    $CGAL_BINARY_DIR"
+        rm -rf $CGAL_BINARY_DIR
+    fi
+    mkdir -p $CGAL_BINARY_DIR
+
+    cd $CGAL_BINARY_DIR || exit 1
+
+    unset configBoost
+    echo "----"
+    echo "Configuring $cgalPACKAGE with boost $BOOST_VERSION_NO"
+    echo "    Source         : $CGAL_SOURCE_DIR"
+    echo "    Build          : $CGAL_BINARY_DIR"
+    echo "    Target         : $CGAL_DIR"
+
+
+    if [ -d "$BOOST_ARCH_PATH" ]
+    then
+        echo "    ThirdParty     : boost"
+        configBoost=$(cat <<CMAKE_OPTIONS
+ -DBoost_INCLUDE_DIR=$boostInc
+ -DBoost_LIBRARY_DIRS=$boostLib
+ -DBoost_THREAD_LIBRARY=$boostLib/libboost_thread.a
+ -DBoost_THREAD_LIBRARY_RELEASE=$boostLib/libboost_thread.a
+ -DBoost_SYSTEM_LIBRARY=$boostLib/libboost_system.a
+ -DBoost_SYSTEM_LIBRARY_RELEASE=$boostLib/libboost_system.a
+ -DBoost_VERSION=$BOOST_VERSION_NO
+CMAKE_OPTIONS
+)
+    fi
+
+    export GMP_ARCH_PATH=$WM_COMPILER_DIR
+    export MPFR_ARCH_PATH=$WM_COMPILER_DIR
+    configGmpMpfr=$(cat <<CMAKE_OPTIONS
+ -DGMP_INCLUDE_DIR=$GMP_ARCH_PATH/include
+ -DGMP_LIBRARIES_DIR=$GMP_ARCH_PATH/lib
+ -DGMP_LIBRARIES=$GMP_ARCH_PATH/lib/libgmp.a
+ -DGMPXX_INCLUDE_DIR=$GMP_ARCH_PATH/include
+ -DGMPXX_LIBRARIES=$GMP_ARCH_PATH/lib/libgmpxx.a
+ -DMPFR_INCLUDE_DIR=$MPFR_ARCH_PATH/include
+ -DMPFR_LIBRARIES_DIR=$MPFR_ARCH_PATH/lib
+ -DMPFR_LIBRARIES=$MPFR_ARCH_PATH/lib/libmpfr.a
+CMAKE_OPTIONS
+)
+
+    configZLIB="-DZLIB_INCLUDE_DIR=${WM_COMPILER_DIR}/mingw/include/"
+
+    configCrossCompile=$(cat <<CMAKE_OPTIONS
+ -DGCC_RUN_RES=0 
+ -DGCC_RUN_RES__TRYRUN_OUTPUT="version=$GCCVERSION"
+ -DGMP_RUN_RES=0 
+ -DGMP_RUN_RES__TRYRUN_OUTPUT="version=$GMPVERSION"
+ -DMPFR_RUN_RES=0 
+ -DMPFR_RUN_RES__TRYRUN_OUTPUT="version=$MPFRVERSION"
+ -DCGAL_CFG_DENORMALS_COMPILE_BUG=0
+ -DCGAL_CFG_FPU_ROUNDING_MODE_UNWINDING_VC_BUG=0
+ -DCGAL_CFG_IEEE_754_BUG=0
+ -DCGAL_CFG_ISTREAM_INT_BUG=0
+ -DCGAL_CFG_MATCHING_BUG_5=0
+ -DCGAL_CFG_MATCHING_BUG_6=0
+ -DCGAL_CFG_NESTED_CLASS_FRIEND_DECLARATION_BUG=0
+ -DCGAL_CFG_NO_LIMITS=0
+ -DCGAL_CFG_NO_NEXTAFTER=0
+ -DCGAL_CFG_NO_STL=0
+ -DCGAL_CFG_NO_WARNING_CPP_DIRECTIVE_BUG=0
+ -DCGAL_CFG_NUMERIC_LIMITS_BUG=0
+ -DCGAL_CFG_OUTOFLINE_MEMBER_DEFINITION_BUG=0
+ -DCGAL_CFG_TEMPLATE_IN_DEFAULT_PARAMETER_BUG=0
+ -DCGAL_CFG_TYPENAME_BEFORE_DEFAULT_ARGUMENT_BUG=0
+ -DCGAL_CFG_USING_BASE_MEMBER_BUG_2=0
+CMAKE_OPTIONS
+)
+# Not used:
+#  -DZLIB_RUN_RES=0
+#  -DZLIB_RUN_RES__TRYRUN_OUTPUT="version=$ZLIBVERSION"
+
+    echo "----"
+    set -x
+    
+    if ! onWin; then
+
+        #Note: Must be built statically, due to limitations on LD on Linux
+        cmake \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_INSTALL_PREFIX=$CGAL_ARCH_PATH \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=FALSE \
+            -DWITH_CGAL_ImageIO=OFF \
+            $configCrossCompile \
+            $configBoost $configGmpMpfr $configZLIB \
+            $CGAL_SOURCE_DIR \
+        && make -j $WM_NCOMPPROCS \
+        && make install || exit 1
+        
+    else
+
+        cmake \
+            -G "MSYS Makefiles" \
+            -DCMAKE_INSTALL_PREFIX=$CGAL_ARCH_PATH \
+            -DCMAKE_BUILD_TYPE=Release \
+            $configCrossCompile \
+            $configBoost $configGmpMpfr $configZLIB \
+            $CGAL_SOURCE_DIR \
+        && make -j $WM_NCOMPPROCS \
+        && make install || exit 1
+
+    fi
+
+    echo "----"
+    echo "create '\$CGAL_ARCH_PATH/share/files'"
+    echo "----"
+    mkdir -p $CGAL_ARCH_PATH/share/src
+    rm -f $CGAL_ARCH_PATH/share/files
+
+    for i in assertions.cpp io.cpp MP_Float.cpp Random.cpp
+    do
+        if [ -e "$CGAL_SOURCE_DIR/src/CGAL/$i" ]
+        then
+            \cp $CGAL_SOURCE_DIR/src/CGAL/$i $CGAL_ARCH_PATH/share/src/
+            echo "\${CGAL_ARCH_PATH}/share/src/$i" >> $CGAL_ARCH_PATH/share/files
+        fi
+    done
+
+    echo "Done CGAL"
+)
+
+# ----------------------------------------------------------------- end-of-file

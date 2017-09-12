@@ -6,11 +6,18 @@
 #+LINK:                     http://www.openfoam.org
 #+OPTIONS: author:nil ^:{}
 # Copyright (c) 2014 OpenFOAM Foundation.
+# Modifications by blueCAPE 2014-02-20 for blueCFD-Core: http://bluecfd.com/Core
 
 * Description
   Scripts for building third-party packages.
 
+* Dependencies:
+  + tar - with 'gz' and 'bz2' support
+  + unzip
+  + 7z - 7zip, but only for (cross-)compiling for Windows.
+
 * The approximate order of execution:
+  + get-em source buildtools=default paraview=default scotch=default openmpi=default cgal=default boost=default metis=default (all optional)
   + makeGcc
   + Allwmake
   + makeCmake (if the system cmake version is < 2.8.8)

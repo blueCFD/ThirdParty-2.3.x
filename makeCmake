@@ -6,8 +6,10 @@
 #   \\  /    A nd           | Copyright (C) 2011 OpenFOAM Foundation
 #    \\/     M anipulation  |
 #------------------------------------------------------------------------------
+# 2014-02-20 blueCAPE Lda: Modifications for blueCFD-Core 2.3
+#------------------------------------------------------------------------------
 # License
-#     This file is part of OpenFOAM.
+#     This file is a derivative work of OpenFOAM.
 #
 #     OpenFOAM is free software: you can redistribute it and/or modify it
 #     under the terms of the GNU General Public License as published by
@@ -22,6 +24,16 @@
 #     You should have received a copy of the GNU General Public License
 #     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 #
+# Modifications
+#     This file has been modified by blueCAPE's unofficial mingw patches for
+#     OpenFOAM.
+#     For more information about these patches, visit:
+#         http://bluecfd.com/Core
+#
+#     Modifications made:
+#        - Derived from the patches for blueCFD 2.1 and 2.2.
+#        - Get the version directly from the defaults.sh file.
+#
 # Script
 #     makeCmake
 #
@@ -29,9 +41,7 @@
 #     Build script for cmake
 #
 #------------------------------------------------------------------------------
-cmakePACKAGE=cmake-2.8.12.1
 
-#------------------------------------------------------------------------------
 # run from third-party directory only
 wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
     echo "Error: Current directory is not \$WM_THIRD_PARTY_DIR"
@@ -40,6 +50,10 @@ wmakeCheckPwd "$WM_THIRD_PARTY_DIR" || {
     exit 1
 }
 . etc/tools/ThirdPartyFunctions
+#------------------------------------------------------------------------------
+
+cmakePACKAGE="cmake-$(. etc/defaults.sh ; echo $cmake_version)"
+
 #------------------------------------------------------------------------------
 
 usage() {
